@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'corsheaders',
     # Local
     'ops',
+    'sqlaudit',
 ]
 
 MIDDLEWARE = [

@@ -21,6 +21,7 @@
 - 🚀 **部署管理** — 支持 生产 / 预发布 / 测试 / 开发 多环境管理
 - 📋 **日志中心** — 集成 Loki 日志查询，类 Grafana Explore 的 LogQL 体验
 - 🔔 **告警中心** — 严重 / 警告 / 信息 多级别告警，支持确认处理
+- 🛡️ **SQL 审计 (新)** — MySQL 数据源管理、SQL 工单提交流程（自动语法安全检查）、只读 SQL 线上查询
 - 👥 **用户管理** — 基于 Django Auth 的用户角色体系
 
 ## 🏗️ 技术栈
@@ -41,12 +42,17 @@ agdevops/
 │   │   ├── loki_views.py          #     Loki 日志代理
 │   │   ├── serializers.py         #     序列化器
 │   │   └── management/commands/   #     管理命令
+│   ├── sqlaudit/                  #   SQL 审计应用 (新)
+│   │   ├── models.py              #     数据源/工单数据模型
+│   │   ├── views.py               #     审计流 API 视图
+│   │   ├── sql_checker.py         #     DDL/DML 语法与安全检查器
+│   │   └── db_executor.py         #     MySQL 查询与执行引擎
 │   ├── requirements.txt
 │   └── manage.py
 │
 └── frontend/                      # Vue 3 前端
     ├── src/
-    │   ├── views/                 #   页面组件（6 个）
+    │   ├── views/                 #   页面组件（包含 SqlOrders, SqlQuery 等 9 个视图）
     │   ├── layout/                #   布局组件
     │   ├── api/                   #   API 封装层
     │   ├── stores/                #   Pinia 状态管理
@@ -92,7 +98,9 @@ npm install
 npm run dev
 ```
 
-启动后访问 **http://localhost:3000** 即可使用。
+启动后使用浏览器访问 **http://localhost:3000** 即可使用。
+
+> 💡 **内网访问提示**：前端 Vite 已配置监听 `0.0.0.0`，因此你可以直接将本机的局域网 IP（例如 `http://192.168.1.x:3000`）分享给同事访问本平台。前提是你本机的防火墙放行了 3000 和 8000 端口。
 
 > 前端已配置 Vite 代理，将 `/api` 请求自动转发到 `http://127.0.0.1:8000`。
 
@@ -106,6 +114,9 @@ npm run dev
 | `/api/alerts/` | 告警管理 (CRUD) |
 | `/api/logs/` | 日志记录管理 (CRUD) |
 | `/api/loki/*` | Loki 日志代理 (labels / query_range / series) |
+| `/api/sqlaudit/datasources/` | MySQL 数据源管理 |
+| `/api/sqlaudit/orders/` | SQL 审计工单与审核流 |
+| `/api/sqlaudit/query/` | 线上数据库安全只读查询 |
 
 ## 📦 数据模型
 
@@ -115,6 +126,8 @@ npm run dev
 | **Deployment** | 部署记录 | app_name, version, environment, status, deployer, host(FK) |
 | **Alert** | 告警 | title, level, source, message, is_acknowledged, host(FK) |
 | **LogEntry** | 日志 | level, service, message, host(FK), timestamp |
+| **DataSource** | MySQL数据源 | name, host, port, username, password(加密), charset |
+| **SqlOrder** | SQL 工单 | title, datasource(FK), database, sql_type, sql_content, status |
 
 ## ⚙️ 配置说明
 

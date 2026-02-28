@@ -43,6 +43,24 @@ const routes = [
                 component: () => import('@/views/Users.vue'),
                 meta: { title: '用户管理', icon: 'User' },
             },
+            {
+                path: 'sql/datasources',
+                name: 'SqlDatasources',
+                component: () => import('@/views/SqlDatasources.vue'),
+                meta: { title: '数据源管理', icon: 'Coin', group: 'SQL 审计' },
+            },
+            {
+                path: 'sql/orders',
+                name: 'SqlOrders',
+                component: () => import('@/views/SqlOrders.vue'),
+                meta: { title: 'SQL 工单', icon: 'Tickets', group: 'SQL 审计' },
+            },
+            {
+                path: 'sql/query',
+                name: 'SqlQuery',
+                component: () => import('@/views/SqlQuery.vue'),
+                meta: { title: 'SQL 查询', icon: 'Search', group: 'SQL 审计' },
+            },
         ],
     },
 ]

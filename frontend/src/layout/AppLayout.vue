@@ -9,16 +9,20 @@
         <span class="logo-text">AgDevOps</span>
       </div>
       <nav class="sidebar-nav">
-        <router-link
-          v-for="item in menuItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: currentRoute === item.name }"
-        >
-          <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
-          <span class="nav-label">{{ item.title }}</span>
-        </router-link>
+        <template v-for="item in menuItems" :key="item.name || item.title">
+          <div v-if="item.divider" class="nav-divider">
+            <span>{{ item.title }}</span>
+          </div>
+          <router-link
+            v-else
+            :to="item.path"
+            class="nav-item"
+            :class="{ active: currentRoute === item.name }"
+          >
+            <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+            <span class="nav-label">{{ item.title }}</span>
+          </router-link>
+        </template>
       </nav>
     </aside>
 
@@ -80,6 +84,10 @@ const menuItems = [
   { path: '/logs',        name: 'Logs',        title: '日志中心', icon: 'Document' },
   { path: '/alerts',      name: 'Alerts',      title: '告警中心', icon: 'Bell' },
   { path: '/users',       name: 'Users',       title: '用户管理', icon: 'User' },
+  { divider: true, title: 'SQL 审计' },
+  { path: '/sql/datasources', name: 'SqlDatasources', title: '数据源',   icon: 'Coin' },
+  { path: '/sql/orders',      name: 'SqlOrders',      title: 'SQL 工单', icon: 'Tickets' },
+  { path: '/sql/query',       name: 'SqlQuery',       title: 'SQL 查询', icon: 'Search' },
 ]
 
 const currentRoute = computed(() => route.name)

@@ -20,4 +20,5 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('ops.urls')),
+    path('api/sqlaudit/', include('sqlaudit.urls')),
 ]
