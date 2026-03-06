@@ -29,7 +29,7 @@ const routes = [
                 path: 'marketplace',
                 name: 'ServiceMarket',
                 component: () => import('@/views/ServiceMarket.vue'),
-                meta: { title: '服务市场', icon: 'Shop' },
+                meta: { title: '工具市场', icon: 'Shop' },
             },
             {
                 path: 'logs',
@@ -68,6 +68,12 @@ const routes = [
                 meta: { title: 'SQL 查询', icon: 'Search', group: 'SQL 审计' },
             },
         ],
+    },
+    {
+        path: '/webshell/:hostId',
+        name: 'WebShell',
+        component: () => import('@/views/WebShell.vue'),
+        meta: { title: 'WebShell' },
     },
 ]
 

@@ -81,7 +81,7 @@ const menuItems = [
   { path: '/dashboard',   name: 'Dashboard',   title: '仪表盘',   icon: 'Odometer' },
   { path: '/hosts',       name: 'Hosts',       title: '主机管理', icon: 'Monitor' },
   { path: '/deployments', name: 'Deployments', title: '部署管理', icon: 'Promotion' },
-  { path: '/marketplace', name: 'ServiceMarket', title: '服务市场', icon: 'Shop' },
+  { path: '/marketplace', name: 'ServiceMarket', title: '工具市场', icon: 'Shop' },
   { path: '/logs',        name: 'Logs',        title: '日志中心', icon: 'Document' },
   { path: '/alerts',      name: 'Alerts',      title: '告警中心', icon: 'Bell' },
   { path: '/users',       name: 'Users',       title: '用户管理', icon: 'User' },

@@ -354,7 +354,7 @@ volumes:
 
 
 class Command(BaseCommand):
-    help = '初始化服务市场模板数据（12 个中间件）'
+    help = '初始化工具市场模板数据（12 个中间件）'
 
     def handle(self, *args, **options):
         created_count = 0

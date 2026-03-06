@@ -621,7 +621,7 @@ body {
   }
 }
 
-/* ========== 服务市场 ========== */
+/* ========== 工具市场 ========== */
 .market-tabs {
   display: flex;
   gap: 4px;
@@ -855,4 +855,80 @@ body {
   .service-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ========== WebShell ========== */
+.webshell-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #0f172a;
+  overflow: hidden;
+}
+
+.webshell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  flex-shrink: 0;
+}
+
+.webshell-title {
+  display: flex;
+  align-items: center;
+  color: #e2e8f0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.webshell-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-indicator.connecting {
+  background: #f59e0b;
+  animation: pulse-dot 1.5s infinite;
+}
+
+.status-indicator.connected {
+  background: #10b981;
+}
+
+.status-indicator.disconnected {
+  background: #64748b;
+}
+
+.status-indicator.error {
+  background: #ef4444;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.terminal-container {
+  flex: 1;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+}
+
+.terminal-container .xterm-viewport {
+  overflow-y: auto !important;
 }

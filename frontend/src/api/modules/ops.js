@@ -6,6 +6,8 @@ export const getHosts = (params) => request.get('/hosts/', { params })
 export const createHost = (data) => request.post('/hosts/', data)
 export const updateHost = (id, data) => request.put(`/hosts/${id}/`, data)
 export const deleteHost = (id) => request.delete(`/hosts/${id}/`)
+export const testHostConnection = (id) => request.post(`/hosts/${id}/test_connection/`)
+export const refreshHostInfo = (id) => request.post(`/hosts/${id}/refresh_info/`)
 
 export const getDeployments = (params) => request.get('/deployments/', { params })
 export const createDeployment = (data) => request.post('/deployments/', data)

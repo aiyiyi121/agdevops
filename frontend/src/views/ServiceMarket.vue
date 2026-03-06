@@ -2,10 +2,10 @@
   <div class="fade-in">
     <!-- 标签页切换 -->
     <div class="page-header">
-      <h2>服务市场</h2>
+      <h2>工具市场</h2>
       <div class="market-tabs">
         <button class="tab-btn" :class="{ active: activeTab === 'market' }" @click="activeTab = 'market'">
-          <el-icon><Shop /></el-icon> 服务市场
+          <el-icon><Shop /></el-icon> 工具市场
         </button>
         <button class="tab-btn" :class="{ active: activeTab === 'deploy' }" @click="activeTab = 'deploy'; fetchDeployments()">
           <el-icon><Setting /></el-icon> 部署管理
@@ -14,7 +14,7 @@
       </div>
     </div>
 
-    <!-- ============ 服务市场 Tab ============ -->
+    <!-- ============ 工具市场 Tab ============ -->
     <div v-show="activeTab === 'market'" class="market-content">
       <!-- 分类筛选 -->
       <div class="category-bar">
