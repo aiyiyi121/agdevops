@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # Local
     'ops',
     'sqlaudit',
+    'marketplace',
 ]
 
 MIDDLEWARE = [

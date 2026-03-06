@@ -620,3 +620,239 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ========== 服务市场 ========== */
+.market-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+}
+
+.tab-btn.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+}
+
+.tab-badge {
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+.category-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.cat-btn {
+  padding: 6px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.cat-btn:hover {
+  border-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.cat-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.service-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.service-card {
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+  border: 2px solid transparent;
+}
+
+.service-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  border-color: var(--primary-light);
+}
+
+.card-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  font-size: 28px;
+}
+
+.icon-text {
+  font-size: 30px;
+  line-height: 1;
+}
+
+/* 中间件图标渐变背景 */
+.icon-mysql {
+  background: linear-gradient(135deg, #00758f20, #f2971820);
+}
+
+.icon-redis {
+  background: linear-gradient(135deg, #dc382d20, #ff6b6b20);
+}
+
+.icon-postgresql {
+  background: linear-gradient(135deg, #33679120, #2f6db520);
+}
+
+.icon-nginx {
+  background: linear-gradient(135deg, #00993320, #4caf5020);
+}
+
+.icon-jenkins {
+  background: linear-gradient(135deg, #d33f4920, #ef6c0020);
+}
+
+.icon-gitlab {
+  background: linear-gradient(135deg, #fc6d2620, #e2432920);
+}
+
+.icon-grafana {
+  background: linear-gradient(135deg, #f4691120, #ff990020);
+}
+
+.icon-elasticsearch {
+  background: linear-gradient(135deg, #fed01020, #00bfb320);
+}
+
+.icon-loki {
+  background: linear-gradient(135deg, #f4611120, #ff660020);
+}
+
+.icon-jumpserver {
+  background: linear-gradient(135deg, #4a90d920, #0066cc20);
+}
+
+.icon-nacos {
+  background: linear-gradient(135deg, #2293e820, #0099ff20);
+}
+
+.icon-xxljob {
+  background: linear-gradient(135deg, #ff980020, #f4433620);
+}
+
+.card-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.card-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.card-versions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.deployed-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.mini-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.log-output {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.deploy-content .table-card {
+  margin-top: 0;
+}
+
+@media (max-width: 768px) {
+  .service-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .service-grid {
+    grid-template-columns: 1fr;
+  }
+}

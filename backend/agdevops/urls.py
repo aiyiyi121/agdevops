@@ -21,4 +21,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('ops.urls')),
     path('api/sqlaudit/', include('sqlaudit.urls')),
+    path('api/marketplace/', include('marketplace.urls')),
 ]

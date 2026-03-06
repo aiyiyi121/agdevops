@@ -15,6 +15,9 @@ class Host(models.Model):
     cpu_usage = models.FloatField('CPU 使用率 (%)', default=0)
     memory_usage = models.FloatField('内存使用率 (%)', default=0)
     disk_usage = models.FloatField('磁盘使用率 (%)', default=0)
+    ssh_port = models.IntegerField('SSH 端口', default=22)
+    ssh_user = models.CharField('SSH 用户', max_length=64, default='root')
+    ssh_password = models.CharField('SSH 密码', max_length=256, blank=True, default='')
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 

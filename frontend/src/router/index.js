@@ -26,6 +26,12 @@ const routes = [
                 meta: { title: '部署管理', icon: 'Promotion' },
             },
             {
+                path: 'marketplace',
+                name: 'ServiceMarket',
+                component: () => import('@/views/ServiceMarket.vue'),
+                meta: { title: '服务市场', icon: 'Shop' },
+            },
+            {
                 path: 'logs',
                 name: 'Logs',
                 component: () => import('@/views/Logs.vue'),
