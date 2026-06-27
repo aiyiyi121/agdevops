@@ -8,6 +8,7 @@ SxDevOps 是一个面向真实运维现场的开源智能运维 Agent 平台。�
 
 - 在线体验：[https://www.sxdevops.top](https://www.sxdevops.top)
 - 产品介绍页：[SxDevOps AI Agent](https://www.sxdevops.top/ai-agent-promo)
+- 用户使用文档：[docs/用户使用文档.md](docs/用户使用文档.md)
 - 技术栈：`Django + Django REST framework + Channels + Vue 3 + Element Plus`
 - 开源协议：[Apache License 2.0](LICENSE)
 
