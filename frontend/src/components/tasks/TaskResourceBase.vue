@@ -31,6 +31,14 @@
               <el-icon v-if="data.group_type === 'environment'" style="color:#10b981;margin-right:4px;"><Monitor /></el-icon>
               <el-icon v-else style="color:#8b5cf6;margin-right:4px;"><Files /></el-icon>
               {{ node.label }}
+              <el-tag
+                v-if="data.group_type === 'environment' && data.event_environment_code"
+                size="small"
+                effect="plain"
+                class="tree-env-tag"
+              >
+                {{ data.event_environment_code }}
+              </el-tag>
             </span>
             <span class="tree-actions" @click.stop>
               <el-button
@@ -173,12 +181,12 @@
       v-model="nodeDialogVisible"
       :title="nodeDialogTitle"
       class="resource-dialog"
-      width="400px"
+      width="520px"
       top="15vh"
       append-to-body
       destroy-on-close
     >
-      <el-form :model="nodeForm" label-width="78px" class="resource-compact-form">
+      <el-form :model="nodeForm" label-width="96px" class="resource-compact-form">
         <el-form-item v-if="!editingNodeId" label="节点类型">
           <el-radio-group v-model="nodeForm.group_type">
             <el-radio label="environment">环境</el-radio>
@@ -200,6 +208,23 @@
         </el-form-item>
         <el-form-item label="编码">
           <el-input v-model="nodeForm.code" placeholder="可选，例如 prod / payment" />
+        </el-form-item>
+        <el-form-item v-if="nodeForm.group_type === 'environment'" label="事件中心环境">
+          <el-select
+            v-model="nodeForm.event_environment"
+            clearable
+            filterable
+            style="width:100%"
+            placeholder="可选，关联后任务事件按该环境归集"
+          >
+            <el-option
+              v-for="env in eventEnvironmentSelectOptions"
+              :key="env.id"
+              :label="env.label"
+              :value="env.id"
+            />
+          </el-select>
+          <div class="field-hint">未关联时仍按任务环境名称尝试匹配事件中心环境。</div>
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="nodeForm.sort_order" :min="1" :max="9999" style="width:100%" />
@@ -304,6 +329,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Delete, Edit, Files, Monitor, Plus, Search } from '@element-plus/icons-vue'
 import { getK8sClusters } from '@/api/modules/container'
+import { getEventEnvironments } from '@/api/modules/eventwall'
 import {
   createTaskResource,
   createTaskResourceGroup,
@@ -326,6 +352,7 @@ const treeData = ref([])
 const resources = ref([])
 const stats = ref({})
 const k8sClusters = ref([])
+const eventEnvironmentOptions = ref([])
 const loading = reactive({ tree: false, resources: false, submit: false })
 const filters = reactive({ search: '', resource_type: '', status: '', environment: '', system: '' })
 
@@ -341,6 +368,10 @@ const environments = computed(() => treeData.value)
 const systemsForFilter = computed(() => environments.value.find(item => item.id === filters.environment)?.children || [])
 const systemsForResource = computed(() => environments.value.find(item => item.id === resourceForm.environment)?.children || [])
 const selectedK8sClusterName = computed(() => k8sClusters.value.find(item => item.id === resourceForm.cluster)?.name || '')
+const eventEnvironmentSelectOptions = computed(() => eventEnvironmentOptions.value.map(item => ({
+  ...item,
+  label: `${item.name || item.code}（${item.code}）`,
+})))
 const nodeDialogTitle = computed(() => `${editingNodeId.value ? '编辑' : '新增'}节点`)
 const resourceDialogTitle = computed(() => `${editingResourceId.value ? '编辑' : '新增'}执行资源`)
 const emptyText = computed(() => (treeData.value.length ? '暂无匹配资源' : '暂无资源，请先维护左侧环境 / 系统树'))
@@ -354,7 +385,7 @@ const statCards = computed(() => [
 ])
 
 function defaultNodeForm() {
-  return { group_type: 'environment', parent: '', name: '', code: '', sort_order: 100, description: '' }
+  return { group_type: 'environment', parent: '', name: '', code: '', event_environment: '', sort_order: 100, description: '' }
 }
 
 function defaultResourceForm() {
@@ -469,6 +500,7 @@ function openNodeDialog(row = null, parent = null) {
       parent: row.parent || '',
       name: row.name || '',
       code: row.code || '',
+      event_environment: row.event_environment || '',
       sort_order: row.sort_order || 100,
       description: row.description || '',
     })
@@ -559,8 +591,16 @@ async function fetchK8sClusters() {
   }
 }
 
+async function fetchEventEnvironments() {
+  try {
+    eventEnvironmentOptions.value = normalizeList(await getEventEnvironments({ enabled: 'true' }))
+  } catch {
+    eventEnvironmentOptions.value = []
+  }
+}
+
 async function reloadAll() {
-  await Promise.all([fetchTree(), fetchResources(), fetchStats(), fetchK8sClusters()])
+  await Promise.all([fetchTree(), fetchResources(), fetchStats(), fetchK8sClusters(), fetchEventEnvironments()])
 }
 
 async function submitNode() {
@@ -572,6 +612,7 @@ async function submitNode() {
       ...nodeForm,
       name: nodeForm.name.trim(),
       parent: nodeForm.group_type === 'system' ? nodeForm.parent : null,
+      event_environment: nodeForm.group_type === 'environment' ? (nodeForm.event_environment || null) : null,
     }
     if (editingNodeId.value) {
       await updateTaskResourceGroup(editingNodeId.value, payload)
@@ -692,7 +733,17 @@ onMounted(reloadAll)
 .tree-node-label {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   min-width: 0;
+}
+
+.tree-env-tag {
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 6px;
+  color: #245bdb;
+  border-color: rgba(51, 112, 255, 0.18);
+  background: rgba(51, 112, 255, 0.08);
 }
 
 .tree-panel-head {

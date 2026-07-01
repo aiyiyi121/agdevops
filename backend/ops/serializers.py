@@ -257,6 +257,8 @@ class K8sClusterSerializer(serializers.ModelSerializer):
 class TaskResourceGroupSerializer(serializers.ModelSerializer):
     group_type_display = serializers.CharField(source='get_group_type_display', read_only=True)
     parent_name = serializers.CharField(source='parent.name', read_only=True)
+    event_environment_code = serializers.CharField(source='event_environment.code', read_only=True)
+    event_environment_name = serializers.CharField(source='event_environment.name', read_only=True)
 
     class Meta:
         model = TaskResourceGroup
@@ -268,6 +270,9 @@ class TaskResourceGroupSerializer(serializers.ModelSerializer):
             'group_type_display',
             'parent',
             'parent_name',
+            'event_environment',
+            'event_environment_code',
+            'event_environment_name',
             'description',
             'sort_order',
             'created_by',
@@ -288,6 +293,7 @@ class TaskResourceGroupSerializer(serializers.ModelSerializer):
         if group_type == TaskResourceGroup.GROUP_ENVIRONMENT:
             attrs['parent'] = None
         elif group_type == TaskResourceGroup.GROUP_SYSTEM:
+            attrs['event_environment'] = None
             if not parent:
                 raise serializers.ValidationError({'parent': '系统必须归属到一个环境'})
             if parent.group_type != TaskResourceGroup.GROUP_ENVIRONMENT:
@@ -672,7 +678,7 @@ class HostTaskSubmitSerializer(serializers.Serializer):
             cluster_map = {item.id: item for item in K8sCluster.objects.filter(id__in=cluster_ids)}
             resource_map = {
                 item.id: item
-                for item in TaskResource.objects.select_related('environment', 'system', 'cluster').filter(
+                for item in TaskResource.objects.select_related('environment__event_environment', 'system', 'cluster').filter(
                     id__in=set(resource_ids + [cluster_id for _item, cluster_id, _resource_id, _namespace, _name, _kind in normalized_source_items]),
                     resource_type=TaskResource.RESOURCE_K8S,
                 )
@@ -703,6 +709,11 @@ class HostTaskSubmitSerializer(serializers.Serializer):
                         namespace = namespace or (payload.get('namespace') or '').strip()
                         name = name or (payload.get('service_name') or payload.get('workload_name') or payload.get('resource_name') or '').strip()
                 resource_environment = resource.environment.name if resource and resource.environment_id else (item.get('environment_name') or item.get('environment') or '')
+                event_environment = item.get('event_environment') or item.get('event_environment_code') or ''
+                event_environment_name = item.get('event_environment_name') or ''
+                if resource and resource.environment_id and resource.environment.event_environment_id:
+                    event_environment = resource.environment.event_environment.code or event_environment
+                    event_environment_name = resource.environment.event_environment.name or event_environment_name
                 resource_system = resource.system.name if resource and resource.system_id else (item.get('system_name') or item.get('system') or '')
                 normalized_targets.append({
                     'cluster_id': cluster.id,
@@ -711,6 +722,8 @@ class HostTaskSubmitSerializer(serializers.Serializer):
                     'task_resource_id': resource.id if resource else resource_id,
                     'resource_name': resource.name if resource else (item.get('resource_name') or ''),
                     'environment_name': resource_environment,
+                    'event_environment': event_environment,
+                    'event_environment_name': event_environment_name,
                     'system_name': resource_system,
                     'namespace': namespace,
                     'name': name,

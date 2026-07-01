@@ -17,7 +17,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Aim, Share } from '@element-plus/icons-vue'
+import { Aim, CollectionTag, Share } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -26,6 +26,7 @@ const authStore = useAuthStore()
 
 const tabs = computed(() => [
   { path: '/events/wall', title: '事件中心', icon: Aim, permission: 'eventwall.view' },
+  { path: '/events/environments', title: '事件环境', icon: CollectionTag, permission: 'eventwall.environment.view' },
   { path: '/events/sources', title: '事件源', icon: Share, permission: 'eventwall.source.view' },
 ].filter(item => authStore.hasPermission(item.permission)))
 
@@ -76,7 +77,7 @@ function go(path) {
 @media (max-width: 700px) {
   .event-tabs-shell {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .event-tab {

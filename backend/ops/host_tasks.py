@@ -23,6 +23,21 @@ _TASK_THREADS = {}
 _TASK_THREADS_LOCK = threading.Lock()
 
 
+def _task_group_event_environment(group):
+    if not group or not getattr(group, 'event_environment_id', None):
+        return '', ''
+    event_environment = getattr(group, 'event_environment', None)
+    if not event_environment:
+        return '', ''
+    return event_environment.code or '', event_environment.name or ''
+
+
+def _resource_event_environment(resource):
+    if not resource or not getattr(resource, 'environment_id', None):
+        return '', ''
+    return _task_group_event_environment(getattr(resource, 'environment', None))
+
+
 class AnsibleControllerError(RuntimeError):
     pass
 
@@ -37,6 +52,7 @@ class TaskResourceHostTarget:
         self.business_line = resource.system.name if resource.system_id else ''
         self.system_name = self.business_line
         self.environment = resource.environment.name if resource.environment_id else ''
+        self.event_environment, self.event_environment_name = _resource_event_environment(resource)
         self.status = 'online' if resource.status == TaskResource.STATUS_ACTIVE else 'offline'
         self.ssh_port = resource.ssh_port or 22
         self.ssh_user = resource.ssh_user or 'root'
@@ -139,7 +155,7 @@ def resolve_host_source_refs(refs):
     host_map = {host.id: host for host in Host.objects.filter(id__in=host_ids)}
     resource_map = {
         resource.id: TaskResourceHostTarget(resource)
-        for resource in TaskResource.objects.select_related('environment', 'system').filter(
+        for resource in TaskResource.objects.select_related('environment__event_environment', 'system').filter(
             id__in=resource_ids,
             resource_type=TaskResource.RESOURCE_HOST,
         )
@@ -168,6 +184,9 @@ def build_host_target_snapshot(hosts):
             'business_line': getattr(host, 'business_line', ''),
             'system_name': getattr(host, 'system_name', getattr(host, 'business_line', '')),
             'environment': host.environment,
+            'environment_name': host.environment,
+            'event_environment': getattr(host, 'event_environment', ''),
+            'event_environment_name': getattr(host, 'event_environment_name', ''),
             'status': host.status,
         })
     return snapshot
@@ -683,6 +702,29 @@ def _task_severity_for_event(task):
     return EventRecord.SEVERITY_INFO
 
 
+def _task_environment_for_event(task):
+    values = []
+
+    def append(value):
+        text = str(value or '').strip()
+        if text and not text.isdigit() and text not in values:
+            values.append(text)
+
+    source_context = task.source_context or {}
+    selection_filters = task.selection_filters or {}
+    for key in ['event_environment', 'event_environment_code', 'resource_event_environment']:
+        append(source_context.get(key))
+        append(selection_filters.get(key))
+    for item in task.target_snapshot or []:
+        append(item.get('event_environment') or item.get('event_environment_code'))
+    for key in ['resource_environment', 'environment_name', 'environment']:
+        append(source_context.get(key))
+        append(selection_filters.get(key))
+    for item in task.target_snapshot or []:
+        append(item.get('environment_name') or item.get('environment') or item.get('env'))
+    return values[0] if values else ''
+
+
 def record_task_center_event(task, action, title, summary='', request=None, actor_username='', source_type=''):
     try:
         from eventwall.models import EventRecord
@@ -704,6 +746,7 @@ def record_task_center_event(task, action, title, summary='', request=None, acto
         resource_type='host_task',
         resource_id=task.id,
         resource_name=task.name,
+        environment=_task_environment_for_event(task),
         correlation_id=task.correlation_id or f'host-task:{task.id}',
         metadata={
             'event_category': 'task_center',
@@ -771,12 +814,12 @@ def normalize_k8s_execution_target(target):
     cluster = K8sCluster.objects.filter(pk=raw_cluster_id).first() if raw_cluster_id else None
     resource = None
     if resource_id:
-        resource = TaskResource.objects.select_related('environment', 'system', 'cluster').filter(
+        resource = TaskResource.objects.select_related('environment__event_environment', 'system', 'cluster').filter(
             pk=resource_id,
             resource_type=TaskResource.RESOURCE_K8S,
         ).first()
     if not resource and raw_cluster_id and not cluster:
-        resource = TaskResource.objects.select_related('environment', 'system', 'cluster').filter(
+        resource = TaskResource.objects.select_related('environment__event_environment', 'system', 'cluster').filter(
             pk=raw_cluster_id,
             resource_type=TaskResource.RESOURCE_K8S,
         ).first()
@@ -786,6 +829,9 @@ def normalize_k8s_execution_target(target):
             cluster = resource.cluster or _find_k8s_cluster_by_name(resource.name)
         item.setdefault('resource_name', resource.name)
         item.setdefault('environment_name', resource.environment.name if resource.environment_id else '')
+        event_environment, event_environment_name = _resource_event_environment(resource)
+        item.setdefault('event_environment', event_environment)
+        item.setdefault('event_environment_name', event_environment_name)
         item.setdefault('system_name', resource.system.name if resource.system_id else '')
     if not cluster:
         cluster = _find_k8s_cluster_by_name(item.get('cluster_name') or item.get('name'))
@@ -800,6 +846,8 @@ def normalize_k8s_execution_target(target):
         'task_resource_id': resource_id,
         'resource_name': item.get('resource_name') or (resource.name if resource else ''),
         'environment_name': item.get('environment_name') or (resource.environment.name if resource and resource.environment_id else ''),
+        'event_environment': item.get('event_environment') or (_resource_event_environment(resource)[0] if resource else ''),
+        'event_environment_name': item.get('event_environment_name') or (_resource_event_environment(resource)[1] if resource else ''),
         'system_name': item.get('system_name') or (resource.system.name if resource and resource.system_id else ''),
         'namespace': item.get('namespace') or '',
         'name': item.get('name') or item.get('pod_name') or '',
@@ -825,6 +873,8 @@ def build_k8s_target_snapshot(targets):
             'task_resource_id': normalized.get('resource_id'),
             'resource_name': normalized.get('resource_name') or '',
             'environment_name': normalized.get('environment_name') or '',
+            'event_environment': normalized.get('event_environment') or '',
+            'event_environment_name': normalized.get('event_environment_name') or '',
             'system_name': normalized.get('system_name') or '',
             'namespace': namespace,
             'name': name,

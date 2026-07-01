@@ -319,7 +319,7 @@ class HostViewSet(EventWallModelViewSetMixin, RBACPermissionMixin, viewsets.Mode
 
 
 class TaskResourceGroupViewSet(EventWallModelViewSetMixin, RBACPermissionMixin, viewsets.ModelViewSet):
-    queryset = TaskResourceGroup.objects.select_related('parent').prefetch_related('children').all()
+    queryset = TaskResourceGroup.objects.select_related('parent', 'event_environment').prefetch_related('children').all()
     serializer_class = TaskResourceGroupSerializer
     pagination_class = None
     event_module = 'ops'
@@ -362,7 +362,7 @@ class TaskResourceGroupViewSet(EventWallModelViewSetMixin, RBACPermissionMixin, 
 
     @action(detail=False, methods=['get'])
     def tree(self, request):
-        groups = list(TaskResourceGroup.objects.select_related('parent').order_by('group_type', 'sort_order', 'name', 'id'))
+        groups = list(TaskResourceGroup.objects.select_related('parent', 'event_environment').order_by('group_type', 'sort_order', 'name', 'id'))
         resources = TaskResource.objects.values('environment_id', 'system_id', 'resource_type').annotate(total=Count('id'))
         env_counts = {}
         system_counts = {}
@@ -385,6 +385,9 @@ class TaskResourceGroupViewSet(EventWallModelViewSetMixin, RBACPermissionMixin, 
                     'code': system.code,
                     'group_type': system.group_type,
                     'parent': system.parent_id,
+                    'event_environment': system.event_environment_id,
+                    'event_environment_code': system.event_environment.code if system.event_environment_id else '',
+                    'event_environment_name': system.event_environment.name if system.event_environment_id else '',
                     'description': system.description,
                     'sort_order': system.sort_order,
                     'resource_count': system_counts.get(system.id, 0),
@@ -398,6 +401,9 @@ class TaskResourceGroupViewSet(EventWallModelViewSetMixin, RBACPermissionMixin, 
                 'code': group.code,
                 'group_type': group.group_type,
                 'parent': None,
+                'event_environment': group.event_environment_id,
+                'event_environment_code': group.event_environment.code if group.event_environment_id else '',
+                'event_environment_name': group.event_environment.name if group.event_environment_id else '',
                 'description': group.description,
                 'sort_order': group.sort_order,
                 'resource_count': env_counts.get(group.id, 0),
@@ -607,7 +613,7 @@ class HostTaskViewSet(RBACPermissionMixin, viewsets.ModelViewSet):
             if resource_ids:
                 resource_map = {
                     resource.id: resource
-                    for resource in TaskResource.objects.select_related('environment', 'system').filter(
+                    for resource in TaskResource.objects.select_related('environment__event_environment', 'system').filter(
                         id__in=resource_ids,
                         resource_type=TaskResource.RESOURCE_HOST,
                     )
@@ -820,6 +826,8 @@ class HostTaskViewSet(RBACPermissionMixin, viewsets.ModelViewSet):
                 'task_resource_id': item.get('task_resource_id') or item.get('resource_id'),
                 'resource_name': item.get('resource_name') or '',
                 'environment_name': item.get('environment_name') or item.get('environment') or '',
+                'event_environment': item.get('event_environment') or item.get('event_environment_code') or '',
+                'event_environment_name': item.get('event_environment_name') or '',
                 'system_name': item.get('system_name') or '',
                 'namespace': item.get('namespace') or '',
                 'name': item.get('name') or '',

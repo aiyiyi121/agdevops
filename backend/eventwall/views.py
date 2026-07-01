@@ -1,7 +1,7 @@
 ﻿from collections import Counter, defaultdict
 from datetime import timedelta
 
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import filters, status, viewsets
@@ -12,9 +12,9 @@ from rest_framework.views import APIView
 
 from rbac.permissions import RBACPermissionMixin
 
-from .models import EventRecord, EventSource
-from .serializers import EventRecordSerializer, EventSourceIngestSerializer, EventSourceSerializer
-from .services import build_resource, record_event
+from .models import EventEnvironment, EventRecord, EventSource
+from .serializers import EventEnvironmentSerializer, EventRecordSerializer, EventSourceIngestSerializer, EventSourceSerializer
+from .services import build_resource, record_event, resolve_event_environment
 
 
 DEMO_WINDOW_MINUTES = 7 * 24 * 60 - 1
@@ -280,6 +280,12 @@ INGEST_SPEC = {
     'endpoint_template': '/api/event-sources/{type}/ingest/',
     'required_fields': ['title', 'event_category'],
     'recommended_fields': ['event_id', 'occurred_at', 'summary', 'event_type', 'action', 'result', 'severity', 'actor', 'system_name', 'environment', 'application', 'resource_type', 'resource_id', 'resource_name', 'correlation_id', 'tags', 'related_resources', 'changes', 'metadata'],
+    'environment_rules': [
+        'environment 对应事件中心的环境标识或环境别名，建议直接使用事件环境中维护的环境标识。',
+        '外部事件推送时会按事件环境配置校验 environment，命中后统一归集到该事件环境。',
+        '如果未命中已启用的事件环境，事件会被拒绝；请先在事件环境中新增标识或别名，或调整事件源的环境标识。',
+        '平台内置工单系统和任务中心事件未命中时会进入事件环境页的未映射环境提示条，可点击后保存为新的事件环境。',
+    ],
     'event_categories': EVENT_CATEGORY_DEFINITIONS,
     'idempotency': '同一事件源下 event_id 会作为幂等键，重复推送不会生成第二条事件。',
     'scope': '平台内置事件源只接收工单系统和任务中心；外部系统可通过 Webhook 推送 application_release、db_change、config_change、ops_transaction、task_center 事件；平台配置、资源管理、告警配置等内部操作请查看操作审计。',
@@ -290,14 +296,14 @@ INGEST_SPEC = {
         'event_category': 'application_release',
         'occurred_at': '2026-05-06T10:15:00+08:00',
         'title': 'payment-api 发布失败',
-        'summary': 'Jenkins 构建 #184 发布到 prod 失败',
+        'summary': 'Jenkins 构建 #184 发布到电商生产环境失败',
         'event_type': 'deployment',
         'action': 'deploy',
         'result': 'failed',
         'severity': 'danger',
         'actor': 'jenkins',
         'system_name': '交易',
-        'environment': 'prod',
+        'environment': 'ecommerce-prod',
         'application': 'payment-api',
         'resource_type': 'jenkins_build',
         'resource_id': 'payment-api#184',
@@ -379,7 +385,7 @@ def _normalize_provider_payload(source, payload):
         fields = issue.get('fields') or {}
         return {'event_id': payload.get('webhookEvent') or issue.get('id') or issue.get('key'), 'title': fields.get('summary') or f"Jira {issue.get('key', '')}".strip(), 'summary': payload.get('webhookEvent') or 'Jira 事件', 'event_type': 'jira_issue', 'action': payload.get('webhookEvent') or 'issue_event', 'result': EventRecord.RESULT_SUCCESS, 'actor': _safe_get(payload, 'user.name') or _safe_get(payload, 'user.displayName'), 'resource_type': 'jira_issue', 'resource_id': issue.get('key') or issue.get('id') or '', 'resource_name': fields.get('summary') or issue.get('key') or '', 'metadata': payload}
     if source.source_type == EventSource.TYPE_GITLAB:
-        return {'event_id': payload.get('checkout_sha') or payload.get('object_kind') or payload.get('event_name'), 'title': payload.get('object_kind') or payload.get('event_name') or 'GitLab 事件', 'summary': payload.get('message') or payload.get('ref') or '', 'event_type': payload.get('object_kind') or 'gitlab', 'action': payload.get('event_name') or payload.get('object_kind') or 'gitlab_event', 'result': EventRecord.RESULT_SUCCESS, 'actor': payload.get('user_username') or payload.get('user_name') or '', 'application': _safe_get(payload, 'project.name'), 'resource_type': 'gitlab_project', 'resource_id': _safe_get(payload, 'project.id') or '', 'resource_name': _safe_get(payload, 'project.path_with_namespace') or _safe_get(payload, 'project.name'), 'metadata': payload}
+        return {'event_id': payload.get('checkout_sha') or payload.get('object_kind') or payload.get('event_name'), 'title': payload.get('object_kind') or payload.get('event_name') or 'GitLab 事件', 'summary': payload.get('message') or payload.get('ref') or '', 'event_type': payload.get('object_kind') or 'gitlab', 'action': payload.get('event_name') or payload.get('object_kind') or 'gitlab_event', 'result': EventRecord.RESULT_SUCCESS, 'actor': payload.get('user_username') or payload.get('user_name') or '', 'environment': payload.get('environment') or '', 'application': _safe_get(payload, 'project.name'), 'resource_type': 'gitlab_project', 'resource_id': _safe_get(payload, 'project.id') or '', 'resource_name': _safe_get(payload, 'project.path_with_namespace') or _safe_get(payload, 'project.name'), 'metadata': payload}
     if source.source_type == EventSource.TYPE_JENKINS:
         status_value = str(payload.get('status') or _safe_get(payload, 'build.status') or '').lower()
         result = EventRecord.RESULT_FAILED if status_value in {'failed', 'failure', 'aborted'} else EventRecord.RESULT_SUCCESS
@@ -412,6 +418,28 @@ def _event_source_counts(days=7):
             if resource_type in resource_types:
                 result[builtin_code_map.get(source_type, source_type)] += 1
     return result
+
+
+def _event_environment_counts():
+    result = defaultdict(int)
+    for item in EventRecord.objects.filter(_event_wall_record_q()).exclude(environment='').values('environment').annotate(count=Count('id')):
+        result[item['environment']] = item['count']
+    return result
+
+
+def _configured_environment_options():
+    environments = list(EventEnvironment.objects.filter(enabled=True).order_by('sort_order', 'code'))
+    if environments:
+        return [
+            {
+                'code': item.code,
+                'name': item.name,
+                'label': item.name,
+                'aliases': item.aliases or [],
+            }
+            for item in environments
+        ]
+    return []
 
 
 def _source_catalog():
@@ -753,6 +781,15 @@ class EventRecordViewSet(RBACPermissionMixin, viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def filter_options(self, request):
         queryset = self.get_queryset()
+        configured_environments = _configured_environment_options()
+        configured_codes = [item['code'] for item in configured_environments]
+        event_environments = list(queryset.exclude(environment='').values_list('environment', flat=True).distinct().order_by('environment')[:50])
+        if configured_codes:
+            environment_values = configured_codes
+            environment_options = configured_environments
+        else:
+            environment_values = event_environments
+            environment_options = [{'code': item, 'name': item, 'label': item, 'aliases': []} for item in event_environments]
         scope_rows = list(
             queryset
             .exclude(environment='')
@@ -785,7 +822,9 @@ class EventRecordViewSet(RBACPermissionMixin, viewsets.ReadOnlyModelViewSet):
             'system_names': system_names,
             'systems': system_names,
             'business_lines': system_names,
-            'environments': list(queryset.exclude(environment='').values_list('environment', flat=True).distinct().order_by('environment')[:50]),
+            'environments': environment_values,
+            'environment_options': environment_options,
+            'event_environments': event_environments,
             'applications': sorted({
                 _normalize_service_name(application)
                 for application in queryset.exclude(application='').values_list('application', flat=True).distinct()
@@ -1261,6 +1300,51 @@ class EventSourceViewSet(RBACPermissionMixin, viewsets.ModelViewSet):
         return Response(self.get_serializer(source).data)
 
 
+class EventEnvironmentViewSet(RBACPermissionMixin, viewsets.ModelViewSet):
+    serializer_class = EventEnvironmentSerializer
+    queryset = EventEnvironment.objects.all()
+    lookup_field = 'code'
+    search_fields = ['code', 'name', 'description']
+    filter_backends = [filters.SearchFilter]
+    filterset_fields = ['enabled']
+    rbac_permissions = {
+        'list': ['eventwall.environment.view'],
+        'retrieve': ['eventwall.environment.view'],
+        'create': ['eventwall.environment.manage'],
+        'update': ['eventwall.environment.manage'],
+        'partial_update': ['eventwall.environment.manage'],
+        'destroy': ['eventwall.environment.manage'],
+        'unmatched': ['eventwall.environment.view'],
+    }
+
+    def get_queryset(self):
+        return EventEnvironment.objects.all().order_by('sort_order', 'code')
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['environment_event_counts'] = _event_environment_counts()
+        return context
+
+    @action(detail=False, methods=['get'])
+    def unmatched(self, request):
+        rows = (
+            EventRecord.objects
+            .filter(metadata__environment_unmatched=True)
+            .exclude(environment='')
+            .values('environment')
+            .annotate(count=Count('id'), latest_at=Max('occurred_at'))
+            .order_by('-count', 'environment')[:50]
+        )
+        return Response([
+            {
+                'environment': item['environment'],
+                'count': item['count'],
+                'latest_at': item['latest_at'],
+            }
+            for item in rows
+        ])
+
+
 class ExternalEventIngestView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -1291,6 +1375,12 @@ class ExternalEventIngestView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
+        environment_resolution = resolve_event_environment(data.get('environment', ''), strict=EventEnvironment.objects.filter(enabled=True).exists())
+        if not environment_resolution['ok']:
+            source.status = EventSource.STATUS_WARNING
+            source.last_error = environment_resolution['detail']
+            source.save(update_fields=['status', 'last_error', 'updated_at'])
+            return Response({'environment': environment_resolution['detail']}, status=status.HTTP_400_BAD_REQUEST)
         source_default_category = _normalize_event_category((source.config or {}).get('default_event_category'))
         payload_category = _normalize_event_category(data.get('event_category'))
         trait_category = _event_category_from_traits(data.get('event_type'), data.get('action'), data.get('resource_type'))

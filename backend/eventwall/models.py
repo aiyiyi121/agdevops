@@ -205,3 +205,44 @@ class EventSource(models.Model):
         if not self.token_hash or not token:
             return False
         return secrets.compare_digest(self.token_hash, build_event_source_token_hash(token))
+
+
+class EventEnvironment(models.Model):
+    code = models.CharField('环境标识', max_length=64, unique=True)
+    name = models.CharField('环境名称', max_length=128)
+    aliases = models.JSONField('环境别名', default=list, blank=True)
+    description = models.CharField('说明', max_length=255, blank=True, default='')
+    enabled = models.BooleanField('启用状态', default=True, db_index=True)
+    sort_order = models.PositiveIntegerField('排序', default=100)
+    last_seen_at = models.DateTimeField('最近事件时间', null=True, blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '事件中心环境'
+        verbose_name_plural = '事件中心环境'
+        ordering = ['sort_order', 'code']
+        indexes = [
+            models.Index(fields=['enabled', 'sort_order'], name='eventwall_env_enabled_sort_idx'),
+        ]
+
+    def __str__(self):
+        return self.name or self.code
+
+    def save(self, *args, **kwargs):
+        self.code = str(self.code or '').strip()
+        self.name = str(self.name or self.code).strip()
+        self.aliases = self.normalized_aliases()
+        super().save(*args, **kwargs)
+
+    def normalized_aliases(self):
+        values = []
+        seen = {str(self.code or '').strip().lower(), str(self.name or '').strip().lower()}
+        for item in self.aliases or []:
+            value = str(item or '').strip()
+            key = value.lower()
+            if not value or key in seen:
+                continue
+            seen.add(key)
+            values.append(value)
+        return values

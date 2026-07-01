@@ -37,7 +37,7 @@
           <label class="inline-filter is-required">
             <span>环境</span>
             <el-select v-model="scope.environment" size="small" placeholder="请选择环境" filterable @change="handleEnvironmentChange">
-              <el-option v-for="item in environmentOptions" :key="item" :label="item" :value="item" />
+              <el-option v-for="item in environmentOptions" :key="item.code || item" :label="item.name || item.label || item.code || item" :value="item.code || item" />
             </el-select>
           </label>
           <label class="inline-filter">
@@ -333,7 +333,14 @@ const rangeShortcuts = [
   { text: '最近 24 小时', value: () => defaultAnalysisRange(1440) },
 ]
 
-const environmentOptions = computed(() => filterOptions.value.environments || [])
+const environmentOptions = computed(() => {
+  const options = filterOptions.value.environment_options || []
+  if (options.length) return options
+  return (filterOptions.value.environments || []).map(item => ({ code: item, name: item, label: item }))
+})
+const environmentNameMap = computed(() => {
+  return Object.fromEntries(environmentOptions.value.map(item => [item.code || item, item.name || item.label || item.code || item]))
+})
 const systemOptions = computed(() => {
   if (!scope.environment) return []
   const scoped = filterOptions.value.systems_by_environment?.[scope.environment]
@@ -402,7 +409,7 @@ const querySummaryItems = computed(() => {
   const items = [
     { key: 'time', label: '时间', value: `${formatTime(startAt)} - ${formatTime(endAt)}`, clearable: false },
   ]
-  if (scope.environment) items.push({ key: 'environment', label: '环境', value: scope.environment, clearable: false })
+  if (scope.environment) items.push({ key: 'environment', label: '环境', value: environmentDisplayName(scope.environment), clearable: false })
   if (scope.system_name) items.push({ key: 'system_name', label: '系统', value: scope.system_name, clearable: true })
   if (scope.application) items.push({ key: 'application', label: '服务', value: scope.application, clearable: true })
   if (eventSourceCode.value) {
@@ -568,7 +575,7 @@ async function clearAllFilters() {
 
 function ensureRequiredEnvironment() {
   if (!scope.environment && environmentOptions.value.length) {
-    scope.environment = environmentOptions.value[0]
+    scope.environment = environmentOptions.value[0].code || environmentOptions.value[0]
   }
 }
 
@@ -806,7 +813,11 @@ function eventCategoryLabel(row) {
 }
 
 function environmentLabel(row) {
-  return row?.environment || '未标注环境'
+  return environmentDisplayName(row?.environment) || '未标注环境'
+}
+
+function environmentDisplayName(value) {
+  return environmentNameMap.value[value] || value || ''
 }
 
 function systemLabel(row) {
