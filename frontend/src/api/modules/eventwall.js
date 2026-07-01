@@ -15,3 +15,8 @@ export const updateEventSource = (type, data) => request.patch(`/event-sources/$
 export const deleteEventSource = (type) => request.delete(`/event-sources/${type}/`)
 export const toggleEventSource = (type) => request.post(`/event-sources/${type}/toggle_enabled/`)
 export const issueEventSourceToken = (type) => request.post(`/event-sources/${type}/issue_token/`)
+export const getEventEnvironments = (params) => request.get('/event-environments/', { params })
+export const createEventEnvironment = (data) => request.post('/event-environments/', data)
+export const updateEventEnvironment = (code, data) => request.patch(`/event-environments/${code}/`, data)
+export const deleteEventEnvironment = (code) => request.delete(`/event-environments/${code}/`)
+export const getUnmatchedEventEnvironments = () => request.get('/event-environments/unmatched/')

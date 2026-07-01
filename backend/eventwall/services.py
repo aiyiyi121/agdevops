@@ -5,9 +5,10 @@ from decimal import Decimal
 from uuid import uuid4
 
 from django.db import models
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
 
-from .models import EventRecord
+from .models import EventEnvironment, EventRecord
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,16 @@ def record_event(
         return None
     try:
         context = build_request_context(request)
+        event_metadata = dict(metadata or {})
+        environment_resolution = resolve_event_environment(environment, strict=False)
+        normalized_environment = environment_resolution['code']
+        if environment:
+            event_metadata.setdefault('environment_raw', environment_resolution['raw'])
+            event_metadata['environment_matched'] = environment_resolution['matched']
+            if environment_resolution['matched']:
+                event_metadata.setdefault('environment_name', environment_resolution['name'])
+            else:
+                event_metadata['environment_unmatched'] = True
         payload = EventRecord.objects.create(
             occurred_at=occurred_at or timezone.now(),
             module=module,
@@ -223,14 +234,16 @@ def record_event(
             resource_id=str(resource_id or ''),
             resource_name=resource_name,
             business_line=business_line,
-            environment=environment,
+            environment=normalized_environment,
             application=application,
             tags=sanitize_value(tags or [], 'tags'),
             related_resources=sanitize_value(related_resources or [], 'related_resources'),
             changes=sanitize_value(changes or {}, 'changes'),
-            metadata=sanitize_value(metadata or {}, 'metadata'),
+            metadata=sanitize_value(event_metadata, 'metadata'),
             is_demo=is_demo,
         )
+        if normalized_environment and environment_resolution['matched']:
+            touch_event_environment(normalized_environment, payload.occurred_at)
         return payload
     except Exception:
         logger.exception('record_event failed: %s %s', module, title)
@@ -300,3 +313,72 @@ def build_json_preview(payload):
     except TypeError:
         text = str(payload)
     return text[:200]
+
+
+def _normalize_environment_key(value):
+    return str(value or '').strip().lower()
+
+
+def resolve_event_environment(value, *, strict=False):
+    raw_value = str(value or '').strip()
+    if not raw_value:
+        return {
+            'ok': not strict,
+            'code': '',
+            'name': '',
+            'raw': '',
+            'matched': False,
+            'detail': '环境不能为空。' if strict else '',
+        }
+
+    try:
+        environments = list(EventEnvironment.objects.filter(enabled=True))
+    except (OperationalError, ProgrammingError):
+        return {
+            'ok': not strict,
+            'code': raw_value,
+            'name': raw_value,
+            'raw': raw_value,
+            'matched': False,
+            'detail': '事件中心环境表尚未完成迁移。' if strict else '',
+        }
+    if not environments:
+        return {
+            'ok': not strict,
+            'code': raw_value,
+            'name': raw_value,
+            'raw': raw_value,
+            'matched': False,
+            'detail': '事件中心尚未配置可用环境。' if strict else '',
+        }
+
+    target = _normalize_environment_key(raw_value)
+    for environment in environments:
+        candidates = [environment.code, environment.name, *(environment.aliases or [])]
+        if target in {_normalize_environment_key(item) for item in candidates if item}:
+            return {
+                'ok': True,
+                'code': environment.code,
+                'name': environment.name,
+                'raw': raw_value,
+                'matched': True,
+                'detail': '',
+            }
+
+    return {
+        'ok': False,
+        'code': raw_value,
+        'name': raw_value,
+        'raw': raw_value,
+        'matched': False,
+        'detail': f'环境 `{raw_value}` 未在事件中心环境中配置。',
+    }
+
+
+def touch_event_environment(code, occurred_at=None):
+    if not code:
+        return
+    try:
+        EventEnvironment.objects.filter(code=code).update(last_seen_at=occurred_at or timezone.now())
+    except (OperationalError, ProgrammingError):
+        return

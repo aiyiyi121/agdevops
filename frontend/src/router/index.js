@@ -358,6 +358,12 @@ const routes = [
         meta: { title: '事件源', icon: 'Share', permission: 'eventwall.source.view' },
       },
       {
+        path: 'events/environments',
+        name: 'EventEnvironments',
+        component: () => import('@/views/EventEnvironments.vue'),
+        meta: { title: '事件环境', icon: 'CollectionTag', permission: 'eventwall.environment.view' },
+      },
+      {
         path: 'events/audit',
         redirect: '/events/wall',
         meta: { hidden: true, permission: 'eventwall.view' },

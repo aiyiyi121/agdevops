@@ -5,7 +5,8 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from aiops.models import AIOpsChatMessage, AIOpsChatSession, AIOpsPendingAction
-from ops.host_tasks import AnsibleControllerError, execute_k8s_task
+from eventwall.models import EventEnvironment, EventRecord
+from ops.host_tasks import AnsibleControllerError, build_host_target_snapshot, execute_k8s_task, normalize_host_execution_targets, record_task_center_event
 from ops.models import Host, HostTask, HostTaskExecution, HostTaskTemplate, K8sCluster, TaskResource, TaskResourceGroup
 from rbac.models import Role
 from rbac.services import ensure_builtin_rbac
@@ -28,6 +29,65 @@ class HostTaskApiTests(TestCase):
             ssh_user='root',
             ssh_password='secret',
         )
+
+    def test_task_resource_group_can_bind_event_environment(self):
+        event_environment = EventEnvironment.objects.create(code='ecommerce-task-test', name='电商任务测试环境')
+
+        response = self.client.post(
+            '/api/task-resource-groups/',
+            {
+                'name': '任务测试环境',
+                'code': 'task-test',
+                'group_type': TaskResourceGroup.GROUP_ENVIRONMENT,
+                'event_environment': event_environment.id,
+                'sort_order': 10,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload['event_environment'], event_environment.id)
+        self.assertEqual(payload['event_environment_code'], 'ecommerce-task-test')
+        self.assertEqual(payload['event_environment_name'], '电商任务测试环境')
+
+        tree_response = self.client.get('/api/task-resource-groups/tree/')
+        self.assertEqual(tree_response.status_code, 200)
+        tree_item = next(item for item in tree_response.json() if item['id'] == payload['id'])
+        self.assertEqual(tree_item['event_environment'], event_environment.id)
+        self.assertEqual(tree_item['event_environment_code'], 'ecommerce-task-test')
+
+    def test_task_center_event_uses_bound_event_environment(self):
+        event_environment = EventEnvironment.objects.create(code='ecommerce-task-prod', name='电商任务生产环境')
+        task_environment = TaskResourceGroup.objects.create(
+            name='任务生产环境',
+            group_type=TaskResourceGroup.GROUP_ENVIRONMENT,
+            event_environment=event_environment,
+        )
+        resource = TaskResource.objects.create(
+            name='app-prod-01',
+            resource_type=TaskResource.RESOURCE_HOST,
+            environment=task_environment,
+            status=TaskResource.STATUS_ACTIVE,
+            ip_address='10.2.1.10',
+        )
+        targets = normalize_host_execution_targets([resource])
+        task = HostTask.objects.create(
+            name='restart-app',
+            task_type=HostTask.TASK_RUN_COMMAND,
+            status=HostTask.STATUS_SUCCESS,
+            target_count=1,
+            target_snapshot=build_host_target_snapshot(targets),
+            created_by=self.user.username,
+            correlation_id='task-center:test-bound-event-environment',
+        )
+
+        event = record_task_center_event(task, 'task_finished', '任务中心执行完成')
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.environment, 'ecommerce-task-prod')
+        self.assertEqual(event.metadata['environment_name'], '电商任务生产环境')
+        self.assertTrue(EventRecord.objects.filter(environment='ecommerce-task-prod').exists())
 
     def _mock_client(self, outputs):
         client = MagicMock()

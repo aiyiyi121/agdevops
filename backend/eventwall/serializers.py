@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import EventRecord, EventSource
+from .models import EventEnvironment, EventRecord, EventSource
 
 
 class EventRecordSerializer(serializers.ModelSerializer):
@@ -146,3 +146,55 @@ class EventSourceIngestSerializer(serializers.Serializer):
     related_resources = serializers.ListField(child=serializers.DictField(), required=False)
     changes = serializers.DictField(required=False)
     metadata = serializers.DictField(required=False)
+
+
+class EventEnvironmentSerializer(serializers.ModelSerializer):
+    event_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventEnvironment
+        fields = [
+            'id',
+            'code',
+            'name',
+            'aliases',
+            'description',
+            'enabled',
+            'sort_order',
+            'last_seen_at',
+            'event_count',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['last_seen_at', 'event_count', 'created_at', 'updated_at']
+
+    def validate_code(self, value):
+        value = str(value or '').strip()
+        if not value:
+            raise serializers.ValidationError('请填写环境标识。')
+        return value
+
+    def validate_name(self, value):
+        value = str(value or '').strip()
+        if not value:
+            raise serializers.ValidationError('请填写环境名称。')
+        return value
+
+    def validate_aliases(self, value):
+        if value in (None, ''):
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError('环境别名必须是数组。')
+        aliases = []
+        seen = set()
+        for item in value:
+            alias = str(item or '').strip()
+            key = alias.lower()
+            if alias and key not in seen:
+                seen.add(key)
+                aliases.append(alias)
+        return aliases
+
+    def get_event_count(self, obj):
+        counts = self.context.get('environment_event_counts') or {}
+        return counts.get(obj.code, 0)

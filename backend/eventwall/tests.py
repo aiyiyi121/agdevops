@@ -5,11 +5,116 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .models import EventRecord, EventSource
+from .models import EventEnvironment, EventRecord, EventSource
+from .services import record_event
 from .views import _ensure_default_event_sources, _ensure_hourly_sample_demo_events
 
 
 class EventSourceTests(TestCase):
+    def test_event_environment_alias_normalizes_internal_events(self):
+        EventEnvironment.objects.create(code='prod', name='生产环境', aliases=['production', '生产'])
+
+        event = record_event(
+            module='ops',
+            category='execution',
+            action='run_task',
+            title='内部任务事件',
+            resource_type='host_task',
+            environment='production',
+        )
+
+        self.assertEqual(event.environment, 'prod')
+        self.assertEqual(event.metadata['environment_raw'], 'production')
+        self.assertTrue(event.metadata['environment_matched'])
+
+    def test_internal_event_keeps_unmatched_environment(self):
+        EventEnvironment.objects.create(code='prod', name='生产环境')
+
+        event = record_event(
+            module='ops',
+            category='execution',
+            action='run_task',
+            title='内部任务事件',
+            resource_type='host_task',
+            environment='sandbox',
+        )
+
+        self.assertEqual(event.environment, 'sandbox')
+        self.assertTrue(event.metadata['environment_unmatched'])
+
+    def test_filter_options_use_configured_event_environments(self):
+        user = get_user_model().objects.create_superuser(username='env-admin', password='pass')
+        EventEnvironment.objects.all().delete()
+        EventEnvironment.objects.create(code='prod', name='生产环境', aliases=['production'], sort_order=10)
+        EventRecord.objects.create(
+            module='ops',
+            category='execution',
+            action='run_task',
+            result=EventRecord.RESULT_SUCCESS,
+            severity=EventRecord.SEVERITY_INFO,
+            title='内部任务事件',
+            resource_type='host_task',
+            environment='sandbox',
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        response = client.get('/api/events/filter_options/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['environments'], ['prod'])
+        self.assertEqual(response.data['environment_options'][0]['name'], '生产环境')
+        self.assertIn('sandbox', response.data['event_environments'])
+
+    def test_external_ingest_rejects_unknown_configured_environment(self):
+        EventEnvironment.objects.create(code='prod', name='生产环境')
+        _ensure_default_event_sources()
+        source = EventSource.objects.get(code='custom')
+        token = source.issue_token()
+        source.enabled = True
+        source.status = EventSource.STATUS_HEALTHY
+        source.save(update_fields=['token_hash', 'token_preview', 'enabled', 'status', 'updated_at'])
+
+        response = APIClient().post(
+            '/api/event-sources/custom/ingest/',
+            {
+                'event_id': 'bad-env-001',
+                'event_category': 'ops_transaction',
+                'title': '未知环境事件',
+                'environment': 'sandbox',
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('environment', response.data)
+
+    def test_external_ingest_accepts_environment_alias(self):
+        EventEnvironment.objects.create(code='prod', name='生产环境', aliases=['production'])
+        _ensure_default_event_sources()
+        source = EventSource.objects.get(code='custom')
+        token = source.issue_token()
+        source.enabled = True
+        source.status = EventSource.STATUS_HEALTHY
+        source.save(update_fields=['token_hash', 'token_preview', 'enabled', 'status', 'updated_at'])
+
+        response = APIClient().post(
+            '/api/event-sources/custom/ingest/',
+            {
+                'event_id': 'good-env-001',
+                'event_category': 'ops_transaction',
+                'title': '别名环境事件',
+                'environment': 'production',
+            },
+            format='json',
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        event = EventRecord.objects.get(metadata__external_event_id='good-env-001')
+        self.assertEqual(event.environment, 'prod')
+
     def test_default_event_sources_include_builtin_and_external_sources(self):
         _ensure_default_event_sources()
 
@@ -34,7 +139,7 @@ class EventSourceTests(TestCase):
         allowed_categories = {'db_change', 'config_change', 'ops_transaction', 'task_center'}
         by_hour = {}
         for event in EventRecord.objects.filter(metadata__hourly_demo_environment='电商测试环境-k3s'):
-            self.assertEqual(event.environment, '电商测试环境-k3s')
+            self.assertEqual(event.environment, 'ecommerce-test')
             self.assertEqual(event.business_line, '电商')
             self.assertEqual(event.application, '')
             self.assertIn(event.metadata['event_category'], allowed_categories)
@@ -72,6 +177,7 @@ class EventSourceTests(TestCase):
                 'result': EventRecord.RESULT_SUCCESS,
                 'severity': EventRecord.SEVERITY_INFO,
                 'system_name': '交易',
+                'environment': 'ecommerce-test',
                 'application': 'payment-api',
             },
             format='json',
@@ -98,6 +204,7 @@ class EventSourceTests(TestCase):
             'title': '重复外部事件',
             'result': EventRecord.RESULT_FAILED,
             'severity': EventRecord.SEVERITY_WARNING,
+            'environment': 'ecommerce-test',
         }
 
         client = APIClient()
@@ -140,6 +247,7 @@ class EventSourceTests(TestCase):
                 'resource_type': 'automation_task',
                 'resource_id': 'task-001',
                 'resource_name': '批量巡检任务',
+                'environment': 'ecommerce-test',
             },
             format='json',
             HTTP_AUTHORIZATION=f'Bearer {token}',
@@ -160,7 +268,7 @@ class EventSourceTests(TestCase):
 
         response = APIClient().post(
             '/api/event-sources/custom/ingest/',
-            {'event_id': 'missing-category', 'title': '缺少分类'},
+            {'event_id': 'missing-category', 'title': '缺少分类', 'environment': 'ecommerce-test'},
             format='json',
             HTTP_AUTHORIZATION=f'Bearer {token}',
         )
@@ -184,6 +292,7 @@ class EventSourceTests(TestCase):
                 'event_name': 'pipeline',
                 'project': {'id': 1, 'name': 'payment-api', 'path_with_namespace': 'trade/payment-api'},
                 'user_username': 'release-bot',
+                'environment': 'ecommerce-test',
             },
             format='json',
             HTTP_AUTHORIZATION=f'Bearer {token}',
@@ -222,7 +331,7 @@ class EventSourceTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         event = EventRecord.objects.get(metadata__event_source_code='jenkins', metadata__external_event_id='gateway-release#42')
-        self.assertEqual(event.environment, '电商测试环境-k3s')
+        self.assertEqual(event.environment, 'ecommerce-test')
         self.assertEqual(event.business_line, '交易')
         self.assertEqual(event.application, 'gateway')
 

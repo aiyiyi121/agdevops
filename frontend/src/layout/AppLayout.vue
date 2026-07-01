@@ -235,6 +235,7 @@ const menuItems = [
     icon: 'Tickets',
     children: [
       { path: '/events/wall', title: '事件中心', icon: 'Aim', permission: 'eventwall.view' },
+      { path: '/events/environments', title: '事件环境', icon: 'CollectionTag', permission: 'eventwall.environment.view' },
       { path: '/events/sources', title: '事件源', icon: 'Share', permission: 'eventwall.source.view' },
     ],
   },

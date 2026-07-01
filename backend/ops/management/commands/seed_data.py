@@ -8,6 +8,8 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from cmdb.demo_seed import BIZ_DATA, BIZ_INFRA, seed_cmdb_demo
+from eventwall.models import EventRecord
+from eventwall.services import record_event
 from marketplace.models import ServiceDeployment, ServiceTemplate
 from ops.deployer import sync_current_deployments_to_cmdb
 from sqlaudit.models import DataSource, QueryOrder, SqlCheckResult, SqlOrder
@@ -30,6 +32,67 @@ from ops.models import (
 
 
 SYSTEM_TRADE = '交易系统'
+
+
+def seed_eventwall_unmatched_environment_demo(stdout):
+    stdout.write('正在生成事件环境未映射演示数据...')
+    EventRecord.objects.filter(metadata__demo_unmatched_environment_ui=True).delete()
+    demo_events = [
+        {
+            'module': 'ops',
+            'category': 'execution',
+            'action': 'task_finished',
+            'title': 'Demo：任务中心未映射环境',
+            'summary': '任务中心事件携带了支付生产环境，但事件中心环境暂未配置该标识或别名。',
+            'resource_type': 'host_task',
+            'resource_id': 'demo-unmatched-task-1',
+            'resource_name': '支付生产巡检任务',
+            'business_line': '支付',
+            'environment': '支付生产环境',
+            'metadata': {'event_category': 'task_center'},
+        },
+        {
+            'module': 'ops',
+            'category': 'execution',
+            'action': 'task_finished',
+            'title': 'Demo：任务中心未映射环境 2',
+            'summary': '任务中心事件再次携带支付生产环境，用于展示未映射环境聚合计数。',
+            'resource_type': 'host_task',
+            'resource_id': 'demo-unmatched-task-2',
+            'resource_name': '支付生产发布后检查',
+            'business_line': '支付',
+            'environment': '支付生产环境',
+            'metadata': {'event_category': 'task_center'},
+        },
+        {
+            'module': 'ops',
+            'category': 'workflow',
+            'action': 'create_ticket',
+            'title': 'Demo：工单系统未映射环境',
+            'summary': '工单事件携带了订单预发环境，但事件中心环境暂未配置该标识或别名。',
+            'resource_type': 'transaction_ticket',
+            'resource_id': 'demo-unmatched-ticket-1',
+            'resource_name': '订单预发变更工单',
+            'business_line': '订单',
+            'environment': '订单预发环境',
+            'metadata': {'event_category': 'ops_transaction'},
+        },
+    ]
+    for index, payload in enumerate(demo_events):
+        metadata = {
+            **payload.pop('metadata'),
+            'demo_unmatched_environment_ui': True,
+        }
+        record_event(
+            source_type=EventRecord.SOURCE_SEED,
+            actor_type=EventRecord.ACTOR_SYSTEM,
+            actor_username='system',
+            actor_display='System',
+            is_demo=True,
+            occurred_at=timezone.now() - timedelta(minutes=15 + index),
+            metadata=metadata,
+            **payload,
+        )
 
 
 def seed_marketplace_demo(stdout, hosts):
@@ -1398,4 +1461,5 @@ class Command(BaseCommand):
         call_command('seed_multicloud_demo')
         sync_current_deployments_to_cmdb()
         call_command('seed_eventwall_demo')
+        seed_eventwall_unmatched_environment_demo(self.stdout)
 

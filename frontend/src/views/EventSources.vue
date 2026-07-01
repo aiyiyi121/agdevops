@@ -161,6 +161,14 @@ Content-Type: application/json</pre>
         </section>
 
         <section>
+          <h4>环境字段对应</h4>
+          <p>载荷中的 <code>environment</code> 用于匹配事件中心里的事件环境。</p>
+          <div class="help-rule-list">
+            <span v-for="item in ingestSpec.environment_rules || []" :key="item">{{ item }}</span>
+          </div>
+        </section>
+
+        <section>
           <h4>系统配置要点</h4>
           <div class="help-source-grid">
             <article>
@@ -191,7 +199,7 @@ Content-Type: application/json</pre>
   "result": "failed",
   "severity": "danger",
   "system_name": "交易",
-  "environment": "prod",
+  "environment": "ecommerce-prod",
   "application": "payment-api",
   "resource_type": "jenkins_build",
   "resource_id": "payment-api#184"
@@ -263,6 +271,13 @@ Content-Type: application/json</pre>
           <h4>推荐字段</h4>
           <div class="chip-wrap">
             <span v-for="item in ingestSpec.recommended_fields || []" :key="item">{{ item }}</span>
+          </div>
+        </section>
+        <section class="detail-section">
+          <h4>环境字段对应</h4>
+          <p>载荷中的 <code>environment</code> 会按事件环境里的环境标识或环境别名进行匹配。</p>
+          <div class="mapping-list mapping-list--stack">
+            <span v-for="item in ingestSpec.environment_rules || []" :key="item">{{ item }}</span>
           </div>
         </section>
         <section class="detail-section">
@@ -1114,19 +1129,31 @@ onMounted(loadAll)
 }
 
 .chip-wrap,
-.mapping-list {
+.mapping-list,
+.help-rule-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
 .chip-wrap span,
-.mapping-list span {
+.mapping-list span,
+.help-rule-list span {
   padding: 2px 7px;
   border-radius: 6px;
   background: #f2f3f5;
   color: #4e5969;
   font-size: 12px;
+}
+
+.mapping-list--stack,
+.help-rule-list {
+  flex-direction: column;
+}
+
+.mapping-list--stack span,
+.help-rule-list span {
+  line-height: 1.6;
 }
 
 .mapping-list em {
