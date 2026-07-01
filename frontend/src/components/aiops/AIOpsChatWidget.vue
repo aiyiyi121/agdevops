@@ -588,6 +588,8 @@ const STORAGE_SESSION_KEY = 'sxdevops_aiops_current_session'
 const STORAGE_VISIBLE_KEY = 'sxdevops_aiops_visible'
 const STORAGE_ANALYSIS_KEY = 'sxdevops_aiops_analysis_only'
 const STORAGE_DRAFT_PREFIX = 'sxdevops_aiops_draft_'
+const AIOPS_SESSION_REQUEST_CONFIG = { skipErrorMessage: true }
+const AIOPS_SESSION_MISSING_MESSAGE = '会话不存在或已被删除，请刷新会话列表后重新选择会话，或新建会话后再提问。'
 
 const router = useRouter()
 const route = useRoute()
@@ -1626,6 +1628,36 @@ async function refreshSessionListOnly() {
   sessions.value = response.results || response || []
 }
 
+function isAIOpsSessionMissingError(error) {
+  const status = error?.response?.status
+  const requestUrl = String(error?.config?.url || '')
+  const detail = error?.response?.data?.detail
+  const message = typeof detail === 'string' ? detail : ''
+  return status === 404
+    && requestUrl.includes('/aiops/sessions/')
+    && (message.includes('会话不存在') || message.includes('AIOpsChatSession'))
+}
+
+function clearCurrentSessionIfMatches(sessionId) {
+  if (!sessionId || currentSessionId.value === sessionId) {
+    stopMessagePolling()
+    currentSessionId.value = null
+    localStorage.removeItem(STORAGE_SESSION_KEY)
+    messages.value = []
+    loadDraft(null)
+  }
+}
+
+async function handleMissingChatSession(sessionId) {
+  clearCurrentSessionIfMatches(sessionId)
+  try {
+    await refreshSessionListOnly()
+  } catch {
+    // 保留本地清理结果，避免继续用失效会话发请求。
+  }
+  ElMessage.warning(AIOPS_SESSION_MISSING_MESSAGE)
+}
+
 async function applyLatestMessages(sessionId, latestMessages) {
   if (currentSessionId.value !== sessionId) return
   messages.value = latestMessages
@@ -1670,11 +1702,12 @@ function startMessagePolling(sessionId, assistantMessageId) {
 
   const finalizePoll = async () => {
     if (!pollingSessionId || pollingSessionId !== sessionId || pollingMessageId !== assistantMessageId) return
+    let missingSessionHandled = false
     try {
       let stableRounds = 0
       let previousSignature = ''
       for (let attempt = 0; attempt < FINAL_POLL_MAX_ATTEMPTS; attempt += 1) {
-        const latestMessages = await getAIOpsMessages(sessionId)
+        const latestMessages = await getAIOpsMessages(sessionId, AIOPS_SESSION_REQUEST_CONFIG)
         await applyLatestMessages(sessionId, latestMessages)
         const target = latestMessages.find(item => item.id === assistantMessageId)
         const status = getProcessingStatus(target)
@@ -1690,15 +1723,24 @@ function startMessagePolling(sessionId, assistantMessageId) {
         }
         await waitFor(attempt === 0 ? 240 : 360)
       }
+    } catch (error) {
+      if (isAIOpsSessionMissingError(error)) {
+        missingSessionHandled = true
+        await handleMissingChatSession(sessionId)
+        return
+      }
+      throw error
     } finally {
       stopMessagePolling()
-      await refreshSessionListOnly()
+      if (!missingSessionHandled) {
+        await refreshSessionListOnly()
+      }
     }
   }
 
   const poll = async () => {
     try {
-      const latestMessages = await getAIOpsMessages(sessionId)
+      const latestMessages = await getAIOpsMessages(sessionId, AIOPS_SESSION_REQUEST_CONFIG)
       await applyLatestMessages(sessionId, latestMessages)
       const target = latestMessages.find(item => item.id === assistantMessageId)
       const status = getProcessingStatus(target)
@@ -1713,6 +1755,10 @@ function startMessagePolling(sessionId, assistantMessageId) {
       }
       pollingTimer = window.setTimeout(poll, 1000)
     } catch (error) {
+      if (isAIOpsSessionMissingError(error)) {
+        await handleMissingChatSession(sessionId)
+        return
+      }
       if (pollingFinalizeAttempts < 1) {
         pollingFinalizeAttempts += 1
         pollingTimer = window.setTimeout(finalizePoll, 320)
@@ -1742,6 +1788,9 @@ async function fetchSessions() {
       await selectSession(currentSessionId.value)
       return
     }
+    if (currentSessionId.value) {
+      clearCurrentSessionIfMatches(currentSessionId.value)
+    }
     if (sessions.value.length) {
       await selectSession(sessions.value[0].id)
     } else {
@@ -1759,12 +1808,19 @@ async function selectSession(sessionId) {
   mobileSessionVisible.value = false
   loading.value.messages = true
   try {
-    messages.value = await getAIOpsMessages(sessionId)
+    messages.value = await getAIOpsMessages(sessionId, AIOPS_SESSION_REQUEST_CONFIG)
     resumeMessagePolling(sessionId, messages.value)
     loadDraft(sessionId)
     await nextTick()
     scrollToBottom(true)
     focusComposer()
+  } catch (error) {
+    if (isAIOpsSessionMissingError(error)) {
+      await handleMissingChatSession(sessionId)
+      return
+    }
+    ElMessage.error(error?.response?.data?.detail || '加载会话消息失败')
+    throw error
   } finally {
     loading.value.messages = false
   }
@@ -1820,7 +1876,7 @@ async function handleSend() {
     const response = await sendAIOpsMessageAsync(sessionId, {
       content,
       analysis_only: effectiveAnalysisOnly.value,
-    })
+    }, AIOPS_SESSION_REQUEST_CONFIG)
     messages.value.push(response.user_message)
     messages.value.push(response.assistant_message)
     pendingAssistantMessage.value = null
@@ -1832,6 +1888,10 @@ async function handleSend() {
   } catch (error) {
     composer.value = rawContent
     persistDraft(sessionId, rawContent)
+    if (isAIOpsSessionMissingError(error)) {
+      await handleMissingChatSession(sessionId)
+      return
+    }
     ElMessage.error(error?.response?.data?.detail || '发送失败，请稍后重试')
   } finally {
     loading.value.send = false
@@ -1869,7 +1929,7 @@ async function handleDeleteSession(session) {
   }
   try {
     loading.value.deleteSession = session.id
-    await deleteAIOpsSession(session.id)
+    await deleteAIOpsSession(session.id, AIOPS_SESSION_REQUEST_CONFIG)
     const wasCurrent = currentSessionId.value === session.id
     if (currentSessionId.value === session.id) {
       stopMessagePolling()
@@ -1893,6 +1953,10 @@ async function handleDeleteSession(session) {
     await selectSession(sessions.value[0].id)
     ElMessage.success('会话已删除')
   } catch (error) {
+    if (isAIOpsSessionMissingError(error)) {
+      await handleMissingChatSession(session.id)
+      return
+    }
     ElMessage.error(error?.response?.data?.detail || '删除会话失败')
   } finally {
     loading.value.deleteSession = null

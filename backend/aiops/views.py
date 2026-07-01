@@ -2,10 +2,12 @@ from datetime import datetime, timedelta, time as datetime_time
 
 from django.core.cache import cache
 from django.db.models import Count, Q
+from django.http import Http404
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import pagination, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -838,6 +840,7 @@ class AIOpsKnowledgeEnvironmentViewSet(RBACPermissionMixin, viewsets.ModelViewSe
 class AIOpsChatSessionViewSet(RBACPermissionMixin, viewsets.ModelViewSet):
     serializer_class = AIOpsChatSessionSerializer
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
+    session_not_found_message = '会话不存在或已被删除，请刷新会话列表后重新选择会话，或新建会话后再提问。'
     demo_account_allowed_actions = {'create', 'send_message', 'send_message_async'}
     rbac_permissions = {
         'list': ['aiops.chat.view'],
@@ -854,6 +857,12 @@ class AIOpsChatSessionViewSet(RBACPermissionMixin, viewsets.ModelViewSet):
         if getattr(self.request.user, 'username', '') == 'demo':
             sync_admin_sessions_to_demo()
         return AIOpsChatSession.objects.filter(user=self.request.user).prefetch_related('messages').order_by('-last_message_at', '-id')
+
+    def get_object(self):
+        try:
+            return super().get_object()
+        except Http404 as exc:
+            raise NotFound(detail=self.session_not_found_message) from exc
 
     def create(self, request, *args, **kwargs):
         serializer = AIOpsCreateSessionSerializer(data=request.data)

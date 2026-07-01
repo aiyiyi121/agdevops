@@ -13,10 +13,10 @@ export const deleteAIOpsKnowledgeEnvironment = (id) => request.delete(`/aiops/kn
 
 export const getAIOpsSessions = (params) => request.get('/aiops/sessions/', { params })
 export const createAIOpsSession = (data) => request.post('/aiops/sessions/', data)
-export const deleteAIOpsSession = (id) => request.post(`/aiops/sessions/${id}/delete_session/`)
-export const getAIOpsMessages = (id) => request.get(`/aiops/sessions/${id}/messages/`)
-export const sendAIOpsMessage = (id, data) => request.post(`/aiops/sessions/${id}/send_message/`, data, { timeout: AIOPS_CHAT_TIMEOUT })
-export const sendAIOpsMessageAsync = (id, data) => request.post(`/aiops/sessions/${id}/send_message_async/`, data, { timeout: 20000 })
+export const deleteAIOpsSession = (id, config = {}) => request.post(`/aiops/sessions/${id}/delete_session/`, null, config)
+export const getAIOpsMessages = (id, config = {}) => request.get(`/aiops/sessions/${id}/messages/`, config)
+export const sendAIOpsMessage = (id, data, config = {}) => request.post(`/aiops/sessions/${id}/send_message/`, data, { timeout: AIOPS_CHAT_TIMEOUT, ...config })
+export const sendAIOpsMessageAsync = (id, data, config = {}) => request.post(`/aiops/sessions/${id}/send_message_async/`, data, { timeout: 20000, ...config })
 
 export const confirmAIOpsAction = (id) => request.post(`/aiops/actions/${id}/confirm/`)
 export const cancelAIOpsAction = (id) => request.post(`/aiops/actions/${id}/cancel/`)
