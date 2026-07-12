@@ -412,6 +412,8 @@ const filters = reactive({
   tag: '',
 })
 const grafanaConfig = reactive({
+  url: '',
+  default_path: '',
   folders: [],
   dashboards: [],
 })
@@ -853,6 +855,8 @@ function queryFolderSuggestions(queryString, callback) {
 }
 
 function applyGrafanaConfig(data = {}) {
+  grafanaConfig.url = String(data.url || '').trim()
+  grafanaConfig.default_path = String(data.default_path || '').trim()
   grafanaConfig.folders = Array.isArray(data.folders)
     ? data.folders.map((item, index) => normalizeFolder(item, index)).filter((item) => item.path)
     : []
@@ -944,7 +948,7 @@ function buildGrafanaPayload({ dashboardsSource = grafanaConfig.dashboards, fold
       description: '',
       folder: normalizeFolderPath(normalized.folder),
       folder_collapsed: false,
-      path: '',
+      path: String(normalized.path || '').trim(),
       full_url: String(normalized.full_url || '').trim(),
       panel_count: Number(normalized.panel_count || 0),
       tags: Array.isArray(normalized.tags) ? normalized.tags.map((tag) => String(tag).trim()).filter(Boolean) : [],
@@ -953,19 +957,19 @@ function buildGrafanaPayload({ dashboardsSource = grafanaConfig.dashboards, fold
 
   const pendingRows = normalizedDashboards
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => item.title || item.folder || item.full_url || (item.tags || []).length)
+    .filter(({ item }) => item.title || item.folder || item.path || item.full_url || (item.tags || []).length)
 
   const missingTitleRow = pendingRows.find(({ item }) => !item.title)
   if (missingTitleRow) {
     throw new Error(`第 ${missingTitleRow.index + 1} 行缺少看板名称`)
   }
 
-  const missingUrlRow = pendingRows.find(({ item }) => !item.full_url)
+  const missingUrlRow = pendingRows.find(({ item }) => !item.full_url && !item.path)
   if (missingUrlRow) {
-    throw new Error(`第 ${missingUrlRow.index + 1} 行缺少完整 Grafana URL`)
+    throw new Error(`第 ${missingUrlRow.index + 1} 行缺少完整 Grafana URL 或 Grafana 路径`)
   }
 
-  const invalidUrlRow = pendingRows.find(({ item }) => getDashboardUrlError(item.full_url))
+  const invalidUrlRow = pendingRows.find(({ item }) => item.full_url && getDashboardUrlError(item.full_url))
   if (invalidUrlRow) {
     throw new Error(`第 ${invalidUrlRow.index + 1} 行 Grafana URL 格式无效`)
   }
@@ -974,14 +978,14 @@ function buildGrafanaPayload({ dashboardsSource = grafanaConfig.dashboards, fold
 
   return {
     enabled: true,
-    url: '',
-    default_path: '',
+    url: grafanaConfig.url,
+    default_path: grafanaConfig.default_path,
     folders: mergedFolders.map((item) => ({
       path: item.path,
       description: String(item.description || '').trim(),
       folder_collapsed: Boolean(item.folder_collapsed),
     })),
-    dashboards: normalizedDashboards.filter((item) => item.title && item.full_url),
+    dashboards: normalizedDashboards.filter((item) => item.title && (item.full_url || item.path)),
   }
 }
 
