@@ -187,4 +187,4 @@ Write-Host 'Frontend: http://localhost:3000'
 Write-Host 'Backend : http://localhost:8000'
 Write-Host "Logs    : $logDir"
 Write-Host ''
-Write-Host 'Default account: admin / Admin@123456'
+Write-Host 'Admin account is created only when SXDEVOPS_ADMIN_INITIAL_PASSWORD is configured.'

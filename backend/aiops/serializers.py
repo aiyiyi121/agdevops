@@ -16,6 +16,7 @@ from .models import (
     AIOpsSkill,
     AIOpsToolInvocation,
 )
+from .services import _validate_mcp_stdio_command
 from .services import _ensure_task_draft_title, _is_generic_task_title, get_model_provider_setup_hint
 
 
@@ -100,6 +101,27 @@ class AIOpsMCPServerSerializer(serializers.ModelSerializer):
         model = AIOpsMCPServer
         fields = '__all__'
         read_only_fields = ['is_builtin']
+
+    def validate(self, attrs):
+        server_type = attrs.get('server_type') or getattr(self.instance, 'server_type', '')
+        if server_type != AIOpsMCPServer.SERVER_STDIO:
+            return attrs
+        endpoint = attrs.get('endpoint_or_command')
+        if endpoint is None and self.instance:
+            endpoint = self.instance.endpoint_or_command
+        try:
+            _validate_mcp_stdio_command(endpoint or '')
+        except ValueError as exc:
+            raise serializers.ValidationError({'endpoint_or_command': str(exc)}) from exc
+        auth_config = attrs.get('auth_config')
+        if auth_config is None and self.instance:
+            auth_config = self.instance.auth_config
+        explicit_env = (auth_config or {}).get('env') or {}
+        blocked_keys = {'PATH', 'PATHEXT', 'PYTHONPATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES'}
+        invalid_keys = [str(key) for key in explicit_env if str(key).upper() in blocked_keys]
+        if invalid_keys:
+            raise serializers.ValidationError({'auth_config': f'禁止设置受保护的环境变量：{", ".join(invalid_keys)}'})
+        return attrs
 
     def update(self, instance, validated_data):
         if instance.is_builtin:

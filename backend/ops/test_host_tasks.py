@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 
 from aiops.models import AIOpsChatMessage, AIOpsChatSession, AIOpsPendingAction
 from eventwall.models import EventEnvironment, EventRecord
-from ops.host_tasks import AnsibleControllerError, build_host_target_snapshot, execute_k8s_task, normalize_host_execution_targets, record_task_center_event
+from ops.host_tasks import AnsibleControllerError, _validate_remote_command, build_host_target_snapshot, execute_k8s_task, normalize_host_execution_targets, record_task_center_event
 from ops.models import Host, HostTask, HostTaskExecution, HostTaskTemplate, K8sCluster, TaskResource, TaskResourceGroup
 from rbac.models import Role
 from rbac.services import ensure_builtin_rbac
@@ -29,6 +29,11 @@ class HostTaskApiTests(TestCase):
             ssh_user='root',
             ssh_password='secret',
         )
+
+    def test_remote_command_rejects_shell_chaining(self):
+        task = HostTask(task_type=HostTask.TASK_RUN_COMMAND, payload={})
+        with self.assertRaises(ValueError):
+            _validate_remote_command(task, 'id; whoami')
 
     def test_task_resource_group_can_bind_event_environment(self):
         event_environment = EventEnvironment.objects.create(code='ecommerce-task-test', name='电商任务测试环境')

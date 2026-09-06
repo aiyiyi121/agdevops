@@ -52,6 +52,8 @@ from .services import (
     _is_direct_log_question,
     _normalize_formatter_output,
     _normalize_mcp_input_schema,
+    _build_safe_mcp_stdio_env,
+    _validate_mcp_stdio_command,
     _build_evidence_bundle_result,
     _infer_alert_root_cause,
     _request_model_completion,
@@ -106,6 +108,33 @@ class AIOpsApiTests(TestCase):
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
         Host.objects.create(hostname='prod-web-01', ip_address='10.0.0.10', environment='prod', status='online')
+
+    def test_mcp_stdio_command_and_environment_are_restricted(self):
+        with self.assertRaises(ValueError):
+            _validate_mcp_stdio_command('python -c "import os"')
+        with self.assertRaises(ValueError):
+            _validate_mcp_stdio_command('npx server | sh')
+        with self.assertRaises(ValueError):
+            _validate_mcp_stdio_command('npx -y evil-mcp-package')
+        self.assertEqual(
+            _validate_mcp_stdio_command('npx -y @n9e/n9e-mcp-server stdio')[0],
+            'npx',
+        )
+        env = _build_safe_mcp_stdio_env({'env': {'PATH': 'malicious', 'SW_USERNAME': 'readonly'}})
+        self.assertNotEqual(env.get('PATH'), 'malicious')
+        self.assertEqual(env.get('SW_USERNAME'), 'readonly')
+
+    def test_generated_task_rejects_dangerous_command(self):
+        draft = build_task_draft(
+            self.user,
+            question='在 prod 环境执行命令',
+            draft_request={
+                'task_kind': 'run_command',
+                'target_host_ids': [Host.objects.get(hostname='prod-web-01').id],
+                'payload': {'command': 'rm -rf /'},
+            },
+        )
+        self.assertIn('error', draft)
 
     def response_results(self, response):
         if isinstance(response.data, dict) and 'results' in response.data:

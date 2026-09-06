@@ -42,6 +42,22 @@ class AnsibleControllerError(RuntimeError):
     pass
 
 
+_BLOCKED_REMOTE_COMMAND_PATTERNS = (
+    re.compile(r'(^|[;&|\n\r])\s*(?:rm\s+-r(?:f)?|shutdown|reboot|mkfs|userdel|kill\s+-9)\b', re.IGNORECASE),
+    re.compile(r'\b(?:curl|wget)\b[^\n|;&]*\|\s*(?:ba)?sh\b', re.IGNORECASE),
+    re.compile(r'`', re.IGNORECASE),
+)
+
+
+def _validate_remote_command(task, command_text):
+    text = str(command_text or '')
+    if any(pattern.search(text) for pattern in _BLOCKED_REMOTE_COMMAND_PATTERNS):
+        raise ValueError('检测到高风险远程命令，系统已拒绝执行。')
+    if task.task_type == HostTask.TASK_RUN_COMMAND and not (task.payload or {}).get('script_purpose'):
+        if any(token in text for token in (';', '&&', '||', '\n', '\r', '|')):
+            raise ValueError('批量命令禁止 shell 拼接、管道和多行脚本，请提交单条受控命令。')
+
+
 class TaskResourceHostTarget:
     def __init__(self, resource):
         self.source = 'task_resource'
@@ -559,6 +575,7 @@ def _run_single_task_with_ssh(task, host):
     started_at = timezone.now()
     monotonic_started = time.monotonic()
     command_text = _build_command_text(task)
+    _validate_remote_command(task, command_text)
     execution = _create_running_host_execution(task, host, command_text)
     output = ''
     error_message = ''
@@ -611,6 +628,7 @@ def _run_single_task_with_ansible(task, host):
     started_at = timezone.now()
     monotonic_started = time.monotonic()
     command_text = _build_command_text(task)
+    _validate_remote_command(task, command_text)
     if task.task_type == HostTask.TASK_RUN_PLAYBOOK:
         if not is_ansible_playbook_available():
             raise AnsibleControllerError('未检测到 Ansible Playbook 控制端环境：后端运行环境未找到 ansible-playbook 命令，请安装 ansible-core 或配置 HOST_TASK_ANSIBLE_PLAYBOOK_BINARY。')
@@ -1513,6 +1531,8 @@ def execute_host_task(task, hosts):
                 execution = _run_single_task(task, host, active_mode)
             else:
                 execution = _create_failed_execution(task, host, _build_command_text(task), str(exc))
+        except ValueError as exc:
+            execution = _create_failed_execution(task, host, _build_command_text(task), str(exc))
         if execution.status == 'success':
             task.success_count += 1
         else:

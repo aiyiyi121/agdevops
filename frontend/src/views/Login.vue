@@ -92,7 +92,6 @@
               进入工作台
             </el-button>
           </el-form>
-          <div class="default-auth-tip">默认账号：admin / Admin@123456</div>
         </div>
       </section>
     </main>
@@ -118,8 +117,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
 const form = reactive({
-  username: 'admin',
-  password: 'Admin@123456',
+  username: '',
+  password: '',
 })
 
 const features = [
@@ -564,13 +563,6 @@ async function handleLogin() {
 .submit-btn:focus {
   background: linear-gradient(135deg, #33bda7 0%, #2c83ca 100%);
   box-shadow: 0 18px 30px rgba(42, 121, 190, 0.26);
-}
-
-.default-auth-tip {
-  margin-top: 14px;
-  color: #98a2b3;
-  font-size: 12px;
-  text-align: center;
 }
 
 @media (min-width: 1440px) and (min-height: 840px) {

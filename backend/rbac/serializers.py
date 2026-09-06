@@ -126,7 +126,7 @@ class UserSerializer(serializers.ModelSerializer):
             'date_joined', 'last_login', 'password', 'role_ids', 'group_ids', 'roles', 'user_groups',
             'effective_permissions', 'display_name', 'is_demo_account',
         ]
-        read_only_fields = ['date_joined', 'last_login']
+        read_only_fields = ['date_joined', 'last_login', 'is_active', 'is_staff', 'is_superuser']
 
     def get_effective_permissions(self, obj):
         return sorted(get_user_effective_permissions(obj))

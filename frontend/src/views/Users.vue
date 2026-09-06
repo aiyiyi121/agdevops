@@ -238,13 +238,13 @@
             <el-input v-model="userForm.password" type="password" show-password :placeholder="editingUserId ? '留空则不修改' : '请输入密码'" />
           </el-form-item>
           <el-form-item label="启用">
-            <el-switch v-model="userForm.is_active" />
+            <el-switch v-model="userForm.is_active" disabled />
           </el-form-item>
           <el-form-item label="管理员">
-            <el-switch v-model="userForm.is_staff" />
+            <el-switch v-model="userForm.is_staff" disabled />
           </el-form-item>
           <el-form-item label="超管">
-            <el-switch v-model="userForm.is_superuser" />
+            <el-switch v-model="userForm.is_superuser" disabled />
           </el-form-item>
         </div>
         <el-form-item label="用户组">

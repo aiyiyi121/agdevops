@@ -2,6 +2,7 @@
 from django.test import TestCase
 
 from .models import PermissionDefinition, Role, UserGroup
+from .serializers import UserSerializer
 from .services import DEMO_ACCOUNT_MUTATION_MESSAGE, ensure_builtin_rbac, get_user_effective_permissions
 
 
@@ -87,3 +88,13 @@ class RbacPermissionTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()['detail'], DEMO_ACCOUNT_MUTATION_MESSAGE)
+
+    def test_user_serializer_cannot_assign_privileged_flags(self):
+        user = User.objects.create_user(username='ordinary-user', password='Passw0rd!123')
+        serializer = UserSerializer(user, data={'is_superuser': True, 'is_staff': True, 'is_active': False}, partial=True)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+        user.refresh_from_db()
+        self.assertFalse(user.is_superuser)
+        self.assertFalse(user.is_staff)
+        self.assertTrue(user.is_active)

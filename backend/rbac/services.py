@@ -1,4 +1,6 @@
-﻿from django.contrib.auth import get_user_model
+﻿import os
+
+from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from sxdevops.features import filter_feature_permissions, permission_feature_enabled
@@ -9,7 +11,7 @@ from .registry import BUILTIN_ROLES, PERMISSION_DEFINITIONS
 
 User = get_user_model()
 DEFAULT_ADMIN_USERNAME = 'admin'
-DEFAULT_ADMIN_PASSWORD = 'Admin@123456'
+DEFAULT_ADMIN_PASSWORD_ENV = 'SXDEVOPS_ADMIN_INITIAL_PASSWORD'
 DEFAULT_ADMIN_EMAIL = 'admin@example.com'
 DEMO_ACCOUNT_USERNAME = 'demo'
 DEMO_ACCOUNT_MUTATION_MESSAGE = '演示账号无实际操作权限。'
@@ -64,10 +66,14 @@ def ensure_default_superuser():
     if User.objects.filter(is_superuser=True).exists():
         return
 
+    initial_password = os.getenv(DEFAULT_ADMIN_PASSWORD_ENV, '').strip()
+    if not initial_password:
+        return
+
     user = User.objects.create_superuser(
         username=DEFAULT_ADMIN_USERNAME,
         email=DEFAULT_ADMIN_EMAIL,
-        password=DEFAULT_ADMIN_PASSWORD,
+        password=initial_password,
     )
     role = Role.objects.filter(code='platform-admin').first()
     if role:
