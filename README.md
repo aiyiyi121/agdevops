@@ -298,7 +298,7 @@ docker compose down
 │   ├── ops/                 # 运维任务、可观测性、发布、告警等
 │   ├── eventwall/           # 事件中心
 │   ├── rbac/                # 权限、角色、菜单与审计
-│   └── ...                  # marketplace、sqlaudit、iac、multicloud 等模块
+│   └── ...                  # marketplace、sqlaudit、iac、multicloud、cmdb 等模块
 ├── frontend/                # Vue 3 前端项目
 │   └── src/
 │       ├── views/           # 页面
