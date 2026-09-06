@@ -4,7 +4,7 @@
 
 SxDevOps is split into `backend/` and `frontend/`.
 
-- `backend/` is a Django project. Shared settings live in `backend/sxdevops/`; domain apps include `ops/`, `marketplace/`, `sqlaudit/`, `iac/`, `multicloud/`, `aiops/`, `rbac/`, `eventwall/`, and `cmdb/`.
+- `backend/` is a Django project. Shared settings live in `backend/sxdevops/`; domain apps include `ops/`, `marketplace/`, `sqlaudit/`, `iac/`, `multicloud/`, `aiops/`, `rbac/`, and `eventwall/`.
 - `frontend/src/` contains the Vue 3 app. Views live in `frontend/src/views/`, layout in `frontend/src/layout/`, API wrappers in `frontend/src/api/`, routes in `frontend/src/router/`, and stores in `frontend/src/stores/`.
 - `docs/` is reserved for public-facing product and architecture documentation.
 - Treat `frontend/dist/`, `frontend/node_modules/`, `backend/__pycache__/`, runtime logs, local SQLite databases, and temporary screenshots as generated artifacts.
